@@ -1,4 +1,7 @@
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
+
 const app = express();
 const port = 3000;
 
@@ -12,67 +15,74 @@ app.listen(port, (err) => {
     console.log(`Server is listening on ${port}`);
 });
 
-//In-memory data storage: Create an array to store tasks
-let tasks = [];
+const tasksFilePath = path.join(__dirname, 'task.json');
 
-// Create (POST) route:
+// Utility function to read tasks
+const readTasksFromFile = () => {
+  const data = fs.readFileSync(tasksFilePath, 'utf-8');
+  return JSON.parse(data);
+};
+
+// Utility function to write tasks
+const writeTasksToFile = (tasks) => {
+  fs.writeFileSync(tasksFilePath, JSON.stringify(tasks, null, 2), 'utf-8');
+};
+
+// Create a new task
 app.post('/tasks', (req, res) => {
-    const { title, description } = req.body;
-
-    if (!title || !description) {
-        return res.status(400).json({ error: 'Title and description are required.' });
+    const tasks = readTasksFromFile();
+    
+     // Validate required fields
+     if (!req.body.title || typeof req.body.title !== 'string' || !req.body.description || typeof req.body.description !== 'string' ) {
+        return res.status(400).json({ error: "Title is required and must be a string." });
     }
-
-    const task = {
-        id: tasks.length + 1,
-        title,
-        description,
-        completed: false,
+    const newTask = {
+      id: tasks.length ? tasks[tasks.length - 1].id + 1 : 1,
+      title: req.body.title,
+      description: req.body.description,
+      completed: false,
     };
-
-    tasks.push(task);
-    res.status(201).json(task);
+    tasks.push(newTask);
+    writeTasksToFile(tasks);
+    res.status(201).json(newTask);
 });
 
-//Read (GET) route:
-//Get all tasks
+// Read all tasks
 app.get('/tasks', (req, res) => {
+    const tasks = readTasksFromFile();
     res.json(tasks);
 });
-
-//Get a single task by ID
+  
+// Read a task by ID
 app.get('/tasks/:id', (req, res) => {
+    const tasks = readTasksFromFile();
     const task = tasks.find((t) => t.id === parseInt(req.params.id));
-    if (!task) return res.status(404).json({ error: 'Task not found.' });
-
+    if (!task) return res.status(404).json({ message: 'Task not found' });
     res.json(task);
 });
 
-
-//Update (PUT) route:
+// Update a task by ID
 app.put('/tasks/:id', (req, res) => {
-    const task = tasks.find((t) => t.id === parseInt(req.params.id));
-    if (!task) return res.status(404).json({ error: 'Task not found.' });
-
-    const { title, description, completed } = req.body;
-
-    if (title) task.title = title;
-    if (description) task.description = description;
-    if (completed !== undefined) task.completed = completed;
-
-    res.json(task);
-});
-
-
-//Delete (DELETE) route:
-app.delete('/tasks/:id', (req, res) => {
+    const tasks = readTasksFromFile();
     const taskIndex = tasks.findIndex((t) => t.id === parseInt(req.params.id));
-    if (taskIndex === -1) return res.status(404).json({ error: 'Task not found.' });
-
-    tasks.splice(taskIndex, 1);
-    res.status(204).send();
+    if (taskIndex === -1) return res.status(404).json({ message: 'Task not found' });
+    if (typeof req.body.title !== 'string' || typeof req.body.description !== 'string' || typeof req.body.completed !== 'boolean') 
+        return res.status(400).json({ error: "Title is required and must be a string." });
+  
+    tasks[taskIndex] = { ...tasks[taskIndex], ...req.body };
+    writeTasksToFile(tasks);
+    res.json(tasks[taskIndex]);
 });
 
+// Delete a task by ID
+app.delete('/tasks/:id', (req, res) => {
+    const tasks = readTasksFromFile();
+    const updatedTasks = tasks.filter((t) => t.id !== parseInt(req.params.id));
+    if (tasks.length === updatedTasks.length) return res.status(404).json({ message: 'Task not found' });
+  
+    writeTasksToFile(updatedTasks);
+    res.status(200).send();
+});
 
 //Error Handling
 
